@@ -1,0 +1,55 @@
+[0.541s] Invoking command in '/root/so100_ws/src/freemodel/freemodel': PYTHONPATH=/root/so100_ws/src/freemodel/freemodel/build/freemodel/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base build/freemodel build --build-base /root/so100_ws/src/freemodel/freemodel/build/freemodel/build install --record /root/so100_ws/src/freemodel/freemodel/build/freemodel/install.log --single-version-externally-managed install_data
+[0.704s] running egg_info
+[0.705s] creating build/freemodel/freemodel.egg-info
+[0.714s] writing build/freemodel/freemodel.egg-info/PKG-INFO
+[0.714s] writing dependency_links to build/freemodel/freemodel.egg-info/dependency_links.txt
+[0.714s] writing entry points to build/freemodel/freemodel.egg-info/entry_points.txt
+[0.714s] writing requirements to build/freemodel/freemodel.egg-info/requires.txt
+[0.714s] writing top-level names to build/freemodel/freemodel.egg-info/top_level.txt
+[0.714s] writing manifest file 'build/freemodel/freemodel.egg-info/SOURCES.txt'
+[0.734s] reading manifest file 'build/freemodel/freemodel.egg-info/SOURCES.txt'
+[0.735s] writing manifest file 'build/freemodel/freemodel.egg-info/SOURCES.txt'
+[0.735s] running build
+[0.735s] running build_py
+[0.735s] creating /root/so100_ws/src/freemodel/freemodel/build/freemodel/build
+[0.735s] creating /root/so100_ws/src/freemodel/freemodel/build/freemodel/build/lib
+[0.735s] creating /root/so100_ws/src/freemodel/freemodel/build/freemodel/build/lib/freemodel
+[0.736s] copying freemodel/fm_offline_spsa.py -> /root/so100_ws/src/freemodel/freemodel/build/freemodel/build/lib/freemodel
+[0.736s] copying freemodel/fm_follower.py -> /root/so100_ws/src/freemodel/freemodel/build/freemodel/build/lib/freemodel
+[0.736s] copying freemodel/__init__.py -> /root/so100_ws/src/freemodel/freemodel/build/freemodel/build/lib/freemodel
+[0.736s] copying freemodel/plot_results.py -> /root/so100_ws/src/freemodel/freemodel/build/freemodel/build/lib/freemodel
+[0.736s] copying freemodel/fm_pipeline.py -> /root/so100_ws/src/freemodel/freemodel/build/freemodel/build/lib/freemodel
+[0.736s] copying freemodel/fm_demo.py -> /root/so100_ws/src/freemodel/freemodel/build/freemodel/build/lib/freemodel
+[0.736s] copying freemodel/fm_leader.py -> /root/so100_ws/src/freemodel/freemodel/build/freemodel/build/lib/freemodel
+[0.736s] running install
+[0.740s] running install_lib
+[0.751s] creating /root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/python3.12/site-packages/freemodel
+[0.751s] copying /root/so100_ws/src/freemodel/freemodel/build/freemodel/build/lib/freemodel/fm_offline_spsa.py -> /root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/python3.12/site-packages/freemodel
+[0.751s] copying /root/so100_ws/src/freemodel/freemodel/build/freemodel/build/lib/freemodel/fm_follower.py -> /root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/python3.12/site-packages/freemodel
+[0.752s] copying /root/so100_ws/src/freemodel/freemodel/build/freemodel/build/lib/freemodel/__init__.py -> /root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/python3.12/site-packages/freemodel
+[0.752s] copying /root/so100_ws/src/freemodel/freemodel/build/freemodel/build/lib/freemodel/plot_results.py -> /root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/python3.12/site-packages/freemodel
+[0.752s] copying /root/so100_ws/src/freemodel/freemodel/build/freemodel/build/lib/freemodel/fm_pipeline.py -> /root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/python3.12/site-packages/freemodel
+[0.752s] copying /root/so100_ws/src/freemodel/freemodel/build/freemodel/build/lib/freemodel/fm_demo.py -> /root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/python3.12/site-packages/freemodel
+[0.752s] copying /root/so100_ws/src/freemodel/freemodel/build/freemodel/build/lib/freemodel/fm_leader.py -> /root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/python3.12/site-packages/freemodel
+[0.752s] byte-compiling /root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/python3.12/site-packages/freemodel/fm_offline_spsa.py to fm_offline_spsa.cpython-312.pyc
+[0.753s] byte-compiling /root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/python3.12/site-packages/freemodel/fm_follower.py to fm_follower.cpython-312.pyc
+[0.755s] byte-compiling /root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/python3.12/site-packages/freemodel/__init__.py to __init__.cpython-312.pyc
+[0.755s] byte-compiling /root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/python3.12/site-packages/freemodel/plot_results.py to plot_results.cpython-312.pyc
+[0.756s] byte-compiling /root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/python3.12/site-packages/freemodel/fm_pipeline.py to fm_pipeline.cpython-312.pyc
+[0.757s] byte-compiling /root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/python3.12/site-packages/freemodel/fm_demo.py to fm_demo.cpython-312.pyc
+[0.759s] byte-compiling /root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/python3.12/site-packages/freemodel/fm_leader.py to fm_leader.cpython-312.pyc
+[0.761s] running install_data
+[0.761s] creating /root/so100_ws/src/freemodel/freemodel/install/freemodel/share/ament_index
+[0.761s] creating /root/so100_ws/src/freemodel/freemodel/install/freemodel/share/ament_index/resource_index
+[0.761s] creating /root/so100_ws/src/freemodel/freemodel/install/freemodel/share/ament_index/resource_index/packages
+[0.761s] copying resource/freemodel -> /root/so100_ws/src/freemodel/freemodel/install/freemodel/share/ament_index/resource_index/packages
+[0.761s] copying package.xml -> /root/so100_ws/src/freemodel/freemodel/install/freemodel/share/freemodel
+[0.761s] running install_egg_info
+[0.772s] Copying build/freemodel/freemodel.egg-info to /root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/python3.12/site-packages/freemodel-0.0.0-py3.12.egg-info
+[0.773s] running install_scripts
+[0.859s] Installing fm_demo script to /root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/freemodel
+[0.859s] Installing fm_follower script to /root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/freemodel
+[0.860s] Installing fm_leader script to /root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/freemodel
+[0.860s] Installing fm_pipeline script to /root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/freemodel
+[0.860s] writing list of installed files to '/root/so100_ws/src/freemodel/freemodel/build/freemodel/install.log'
+[0.878s] Invoked command in '/root/so100_ws/src/freemodel/freemodel' returned '0': PYTHONPATH=/root/so100_ws/src/freemodel/freemodel/build/freemodel/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/root/so100_ws/src/freemodel/freemodel/install/freemodel/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base build/freemodel build --build-base /root/so100_ws/src/freemodel/freemodel/build/freemodel/build install --record /root/so100_ws/src/freemodel/freemodel/build/freemodel/install.log --single-version-externally-managed install_data

@@ -1,0 +1,5 @@
+[console_scripts]
+fm_demo = freemodel.fm_demo:main
+fm_follower = freemodel.fm_follower:main
+fm_leader = freemodel.fm_leader:main
+fm_pipeline = freemodel.fm_pipeline:main

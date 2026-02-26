@@ -1,0 +1,11 @@
+# ROS / colcon
+build/
+install/
+log/
+
+# editor files
+*.swp
+*.tmp
+
+# OS
+.DS_Store

@@ -1,0 +1,14 @@
+{
+  "q_des": [
+    0.5,
+    -0.8
+  ],
+  "joints": [
+    "Shoulder_Pitch",
+    "Elbow"
+  ],
+  "dt": 0.01,
+  "n_traj": 50,
+  "steps_per_traj": 300,
+  "N_total": 15000
+}

@@ -1,0 +1,83 @@
+from launch import LaunchDescription
+from launch.actions import ExecuteProcess, OpaqueFunction
+from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
+from launch_ros.substitutions import FindPackageShare
+import os
+
+def load_urdf(pkg_name, urdf_rel):
+    pkg_share = FindPackageShare(pkg_name).find(pkg_name)
+    urdf_path = os.path.join(pkg_share, 'urdf', urdf_rel)
+    with open(urdf_path, 'r') as f:
+        urdf_content = f.read()
+    gz_content = urdf_content.replace(
+        'package://so_100_arm/models/so_100_arm_5dof/meshes',
+        'model://so_100_arm_5dof/meshes')
+    return ParameterValue(urdf_content, value_type=str), ParameterValue(gz_content, value_type=str)
+
+def generate_launch_description():
+    def launch_setup(context, *args, **kwargs):
+        so100_desc, so100_gz = load_urdf('so100_2dof_bringup', 'so_100_arm_2dof.urdf')
+        so101_desc, so101_gz = load_urdf('so101_2dof_bringup', 'so_100_arm_2dof.urdf')
+
+        gz = ExecuteProcess(
+            cmd=['gz', 'sim', '-r', 'empty.sdf'],
+            output='screen',
+            additional_env={
+                'GZ_SIM_SYSTEM_PLUGIN_PATH': '/opt/ros/jazzy/lib:' + os.environ.get('GZ_SIM_SYSTEM_PLUGIN_PATH',''),
+                'GZ_SIM_RESOURCE_PATH': os.environ.get('GZ_SIM_RESOURCE_PATH',''),
+            }
+        )
+
+        bridge = Node(package='ros_gz_bridge', executable='parameter_bridge', name='bridge',
+            arguments=[
+                '/clock@rosgraph_msgs/msg/Clock[ignition.msgs.Clock',
+                '/tf@tf2_msgs/msg/TFMessage[ignition.msgs.Pose_V',
+                '/tf_static@tf2_msgs/msg/TFMessage[ignition.msgs.Pose_V',
+            ],
+        )
+
+        rsp_so100 = Node(package='robot_state_publisher', executable='robot_state_publisher',
+                         namespace='so100', output='screen',
+                         parameters=[{'robot_description': so100_desc}])
+
+        rsp_so101 = Node(package='robot_state_publisher', executable='robot_state_publisher',
+                         namespace='so101', output='screen',
+                         parameters=[{'robot_description': so101_desc}])
+
+        spawn_so100 = Node(package='ros_gz_sim', executable='create', name='spawn_so100',
+                           arguments=['-string', so100_gz.value, '-name', 'so100_2dof',
+                                      '-x', '0.0', '-y', '0.0', '-z', '0.0'], output='screen')
+
+        spawn_so101 = Node(package='ros_gz_sim', executable='create', name='spawn_so101',
+                           arguments=['-string', so101_gz.value, '-name', 'so101_2dof',
+                                      '-x', '0.6', '-y', '0.0', '-z', '0.0'], output='screen')
+
+        # USE SPAWNER — the correct way (same as original repo)
+        jsb_so100 = Node(package='controller_manager', executable='spawner',
+                         arguments=['joint_state_broadcaster',
+                                    '--controller-manager', '/so100/controller_manager'],
+                         output='screen')
+
+        apc_so100 = Node(package='controller_manager', executable='spawner',
+                         arguments=['arm_position_controller',
+                                    '--controller-manager', '/so100/controller_manager'],
+                         output='screen')
+
+        jsb_so101 = Node(package='controller_manager', executable='spawner',
+                         arguments=['joint_state_broadcaster',
+                                    '--controller-manager', '/so101/controller_manager'],
+                         output='screen')
+
+        apc_so101 = Node(package='controller_manager', executable='spawner',
+                         arguments=['arm_position_controller',
+                                    '--controller-manager', '/so101/controller_manager'],
+                         output='screen')
+
+        return [gz, bridge,
+                rsp_so100, rsp_so101,
+                spawn_so100, spawn_so101,
+                jsb_so100, apc_so100,
+                jsb_so101, apc_so101]
+
+    return LaunchDescription([OpaqueFunction(function=launch_setup)])
