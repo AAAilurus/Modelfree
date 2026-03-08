@@ -30,24 +30,27 @@ from launch_ros.actions import Node
 
 def _default_data_dir() -> str:
     """
-    Resolve hardware/data/ relative to this launch file's location.
+    Resolve the CSV output directory.
 
-    When running from the source tree (development), the launch file is at
-    hardware/launch/dual_hw.launch.py, so hardware/data/ is one level up.
-
-    When installed (after colcon build), override with the data_dir argument
-    or the HARDWARE_DATA_DIR environment variable.
+    Priority:
+      1. HARDWARE_DATA_DIR environment variable
+      2. hardware/data/ under the current working directory (repo root)
+      3. hardware/data/ relative to this launch file (development tree)
+      4. ~/so100_hardware_data (fallback)
     """
     env = os.environ.get('HARDWARE_DATA_DIR', '')
     if env:
         return env
-    launch_dir = Path(__file__).resolve().parent          # hardware/launch/
-    candidate  = launch_dir.parent / 'data'               # hardware/data/
-    if candidate.exists():
-        return str(candidate)
-    # After colcon install the launch file moves; fall back to share dir sibling
-    share_candidate = launch_dir.parent / 'data'
-    return str(share_candidate) if share_candidate.exists() else str(Path.home() / 'so100_hardware_data')
+    # When ros2 launch is run from the repo root, CWD/hardware/data/ is correct
+    cwd_candidate = Path.cwd() / 'hardware' / 'data'
+    if cwd_candidate.is_dir():
+        return str(cwd_candidate)
+    # Development: launch file at hardware/launch/dual_hw.launch.py
+    launch_dir = Path(__file__).resolve().parent
+    dev_candidate = launch_dir.parent / 'data'
+    if dev_candidate.is_dir():
+        return str(dev_candidate)
+    return str(Path.home() / 'so100_hardware_data')
 
 
 def generate_launch_description():

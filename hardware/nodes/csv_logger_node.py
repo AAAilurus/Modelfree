@@ -36,18 +36,26 @@ from sensor_msgs.msg import JointState
 
 
 def _default_data_dir() -> str:
-    """Resolve hardware/data/ relative to this script's location."""
-    # When installed to lib/so100_hardware_bringup/, parent dirs differ from
-    # the source tree, so also accept an env-var override.
+    """
+    Resolve the CSV output directory.
+
+    Priority:
+      1. HARDWARE_DATA_DIR environment variable
+      2. hardware/data/ under CWD (assumes ros2 launch from repo root)
+      3. hardware/data/ relative to this script (development tree)
+      4. ~/so100_hardware_data (fallback)
+    """
     env = os.environ.get('HARDWARE_DATA_DIR', '')
     if env:
         return env
-    # Development: script lives at hardware/nodes/csv_logger_node.py
-    script_dir = Path(__file__).resolve().parent          # hardware/nodes/
-    candidate  = script_dir.parent / 'data'               # hardware/data/
-    if candidate.exists():
-        return str(candidate)
-    # Fallback: home directory
+    cwd_candidate = Path.cwd() / 'hardware' / 'data'
+    if cwd_candidate.is_dir():
+        return str(cwd_candidate)
+    # Development: script at hardware/nodes/csv_logger_node.py
+    script_dir = Path(__file__).resolve().parent
+    dev_candidate = script_dir.parent / 'data'
+    if dev_candidate.is_dir():
+        return str(dev_candidate)
     return str(Path.home() / 'so100_hardware_data')
 
 
