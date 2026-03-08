@@ -1,0 +1,48 @@
+# hardware_params.yaml
+#
+# Default parameters for the SO-100 / SO-101 2-DOF hardware nodes.
+# These values are loaded automatically by the launch files.
+# Override individual values on the command line:
+#   ros2 launch so100_hardware_bringup dual_hw.launch.py rate_hz:=100.0
+
+# -----------------------------------------------------------------------
+# Serial ports  (stable by-id paths — do NOT use ttyUSBx, it can change)
+# -----------------------------------------------------------------------
+leader_serial_port:   /dev/serial/by-id/usb-1a86_USB_Single_Serial_5AAF218344-if00
+follower_serial_port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5AAF219983-if00
+baud_rate: 1000000
+
+# -----------------------------------------------------------------------
+# Servo IDs
+# Full 5-DOF SO-100 assignment (use the 2-DOF subset):
+#   1 = Shoulder_Rotation   (not used in 2-DOF)
+#   2 = Shoulder_Pitch      ← joint 1
+#   3 = Elbow               ← joint 2
+#   4 = Wrist_Pitch         (not used)
+#   5 = Wrist_Roll          (not used)
+# -----------------------------------------------------------------------
+servo_id_j1: 2   # Shoulder_Pitch
+servo_id_j2: 3   # Elbow
+
+# -----------------------------------------------------------------------
+# Joint names (must match existing ROS2 topic and controller config)
+# -----------------------------------------------------------------------
+joint_name_j1: Shoulder_Pitch
+joint_name_j2: Elbow
+
+# -----------------------------------------------------------------------
+# Control rate
+# -----------------------------------------------------------------------
+rate_hz: 50.0
+
+# -----------------------------------------------------------------------
+# Follower-specific
+# goal_speed: 0 = maximum servo speed, 1-32767 = speed-limited
+#             Lower value = smoother but slower tracking.
+# -----------------------------------------------------------------------
+goal_speed: 200
+
+# -----------------------------------------------------------------------
+# Relay
+# -----------------------------------------------------------------------
+relay_scale: 1.0
