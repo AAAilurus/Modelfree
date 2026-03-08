@@ -210,7 +210,7 @@ class FeetechDriver:
         raw = self._ser.read(expected)
         # Retry on short reads (transient bus timing issue)
         for _ in range(self.max_retries):
-            if len(raw) >= 6:
+            if len(raw) >= expected:
                 break
             time.sleep(0.005)
             raw += self._ser.read(expected - len(raw))
