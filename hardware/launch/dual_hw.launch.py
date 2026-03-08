@@ -88,22 +88,22 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'leader_servo_j1',
-            default_value='2',
+            default_value='1',
             description='Leader servo ID for Shoulder_Pitch',
         ),
         DeclareLaunchArgument(
             'leader_servo_j2',
-            default_value='3',
+            default_value='2',
             description='Leader servo ID for Elbow',
         ),
         DeclareLaunchArgument(
             'follower_servo_j1',
-            default_value='2',
+            default_value='1',
             description='Follower servo ID for Shoulder_Pitch',
         ),
         DeclareLaunchArgument(
             'follower_servo_j2',
-            default_value='3',
+            default_value='2',
             description='Follower servo ID for Elbow',
         ),
         DeclareLaunchArgument(

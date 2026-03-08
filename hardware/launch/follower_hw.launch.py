@@ -17,8 +17,8 @@ Optional arguments:
     baud_rate:=1000000
     rate_hz:=50.0
     goal_speed:=200
-    servo_id_j1:=2
-    servo_id_j2:=3
+    servo_id_j1:=1
+    servo_id_j2:=2
 """
 
 from launch import LaunchDescription
@@ -55,12 +55,12 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'servo_id_j1',
-            default_value='2',
+            default_value='1',
             description='Feetech servo ID for Shoulder_Pitch',
         ),
         DeclareLaunchArgument(
             'servo_id_j2',
-            default_value='3',
+            default_value='2',
             description='Feetech servo ID for Elbow',
         ),
         DeclareLaunchArgument(

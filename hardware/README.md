@@ -48,8 +48,8 @@ hardware/
 
 | Servo | Joint           | Default ID |
 |-------|-----------------|------------|
-| J1    | Shoulder_Pitch  | 2          |
-| J2    | Elbow           | 3          |
+| J1    | Shoulder_Pitch  | 1          |
+| J2    | Elbow           | 2          |
 
 Change these in `config/hardware_params.yaml` or as launch arguments.
 
@@ -89,15 +89,17 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 
 ### 4. Build the package
 
-Link or copy the `hardware/` folder into your ROS2 workspace `src/` directory,
-then build:
+The `hardware/` directory is a ROS2 package inside the Modelfree repo.
+Build directly from the repo root:
 
 ```bash
-# From your workspace root (e.g. ~/so100_ws)
-ln -s ~/path/to/Modelfree/hardware  src/so100_hardware_bringup
+cd ~/Modelfree
 colcon build --packages-select so100_hardware_bringup
 source install/setup.bash
 ```
+
+> **Note:** Do NOT create a separate workspace. The Modelfree repo IS the
+> workspace.  `colcon build` discovers `hardware/package.xml` automatically.
 
 ---
 
@@ -202,10 +204,10 @@ All `dual_hw.launch.py` arguments with defaults:
 | `baud_rate`       | `1000000`                                         | Servo baud rate                    |
 | `rate_hz`         | `50.0`                                            | Control / publish rate             |
 | `goal_speed`      | `200`                                             | Servo speed limit (0 = max)        |
-| `leader_servo_j1` | `2`                                               | Leader servo ID for Shoulder_Pitch |
-| `leader_servo_j2` | `3`                                               | Leader servo ID for Elbow          |
-| `follower_servo_j1`| `2`                                              | Follower servo ID for Shoulder_Pitch|
-| `follower_servo_j2`| `3`                                              | Follower servo ID for Elbow        |
+| `leader_servo_j1` | `1`                                               | Leader servo ID for Shoulder_Pitch |
+| `leader_servo_j2` | `2`                                               | Leader servo ID for Elbow          |
+| `follower_servo_j1`| `1`                                              | Follower servo ID for Shoulder_Pitch|
+| `follower_servo_j2`| `2`                                              | Follower servo ID for Elbow        |
 | `scale`           | `1.0`                                             | Relay angle scale factor           |
 | `data_dir`        | `hardware/data/`                                  | CSV output directory               |
 
@@ -254,3 +256,71 @@ ros2 run so100_ioc_pipeline leader_log --ros-args \
 | Follower jerks or overshoots | `goal_speed` too high | Reduce `goal_speed` (e.g. 100) |
 | No CSV file created | `data_dir` does not exist | Run `mkdir -p hardware/data` |
 | `ModuleNotFoundError: pyserial` | Missing dependency | `pip install pyserial` |
+
+---
+
+## Docker command
+
+When running inside a Docker container, you must pass through the serial
+devices so that `/dev/serial/by-id/` is visible.  Use the following command:
+
+```bash
+docker run -it --rm \
+    --privileged \
+    -v /dev:/dev \
+    -v ~/Modelfree:/root/Modelfree \
+    -w /root/Modelfree \
+    --network host \
+    <your-ros2-jazzy-image> \
+    bash
+```
+
+Inside the container:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+pip install pyserial          # if not baked into the image
+cd /root/Modelfree
+colcon build --packages-select so100_hardware_bringup
+source install/setup.bash
+ros2 launch so100_hardware_bringup dual_hw.launch.py
+```
+
+> **Why `--privileged -v /dev:/dev`?**  This bind-mounts the entire `/dev`
+> tree (including `/dev/serial/by-id/`) into the container so the stable
+> serial device paths work identically to the host.
+
+---
+
+## Verification steps
+
+```bash
+# 1. Leader is publishing
+ros2 topic echo /so100/joint_states --once
+
+# 2. Follower command topic exists
+ros2 topic info /so101/arm_position_controller/commands
+
+# 3. Follower receives commands (move the leader arm and watch)
+ros2 topic echo /so101/joint_states --once
+
+# 4. CSV is saved
+ls -lt hardware/data/run_*.csv | head -1
+```
+
+---
+
+## Final assumptions
+
+| Item              | Value                                                             |
+|-------------------|-------------------------------------------------------------------|
+| Workspace         | `~/Modelfree` (the repo root — **not** `~/so100_ws`)             |
+| Leader serial     | `/dev/serial/by-id/usb-1a86_USB_Single_Serial_5AAF218344-if00`   |
+| Follower serial   | `/dev/serial/by-id/usb-1a86_USB_Single_Serial_5AAF219983-if00`   |
+| Servo ID J1       | **1** (Shoulder\_Pitch)                                           |
+| Servo ID J2       | **2** (Elbow)                                                     |
+| Leader topic      | `/so100/joint_states` (sensor\_msgs/JointState)                   |
+| Follower cmd topic| `/so101/arm_position_controller/commands` (std\_msgs/Float64MultiArray) |
+| Follower state    | `/so101/joint_states` (sensor\_msgs/JointState)                   |
+| Baud rate         | 1 000 000                                                         |
+| Control rate      | 50 Hz                                                             |

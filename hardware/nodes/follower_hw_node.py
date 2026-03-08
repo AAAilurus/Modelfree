@@ -17,8 +17,8 @@ so that all existing model-free / IOC / relay nodes work unchanged.
 Parameters:
   serial_port   – serial device for follower arm
   baud_rate     – serial baud rate (default 1 000 000)
-  servo_id_j1   – Feetech servo ID for Shoulder_Pitch (default 2)
-  servo_id_j2   – Feetech servo ID for Elbow          (default 3)
+  servo_id_j1   – Feetech servo ID for Shoulder_Pitch (default 1)
+  servo_id_j2   – Feetech servo ID for Elbow          (default 2)
   joint_name_j1 – ROS joint name for servo 1
   joint_name_j2 – ROS joint name for servo 2
   namespace     – ROS namespace prefix (default 'so101')
@@ -56,8 +56,8 @@ class FollowerHwNode(Node):
             '/dev/serial/by-id/usb-1a86_USB_Single_Serial_5AAF219983-if00',
         )
         self.declare_parameter('baud_rate',     1_000_000)
-        self.declare_parameter('servo_id_j1',   2)
-        self.declare_parameter('servo_id_j2',   3)
+        self.declare_parameter('servo_id_j1',   1)
+        self.declare_parameter('servo_id_j2',   2)
         self.declare_parameter('joint_name_j1', 'Shoulder_Pitch')
         self.declare_parameter('joint_name_j2', 'Elbow')
         self.declare_parameter('namespace',     'so101')
@@ -190,7 +190,10 @@ def main(args=None):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        try:
+            rclpy.shutdown()
+        except Exception:
+            pass
 
 
 if __name__ == '__main__':

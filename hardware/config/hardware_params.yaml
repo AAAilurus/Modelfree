@@ -15,14 +15,14 @@ baud_rate: 1000000
 # -----------------------------------------------------------------------
 # Servo IDs
 # Full 5-DOF SO-100 assignment (use the 2-DOF subset):
-#   1 = Shoulder_Rotation   (not used in 2-DOF)
-#   2 = Shoulder_Pitch      ← joint 1
-#   3 = Elbow               ← joint 2
-#   4 = Wrist_Pitch         (not used)
-#   5 = Wrist_Roll          (not used)
+#   1 = Shoulder_Pitch      ← joint 1
+#   2 = Elbow               ← joint 2
+#   3 = Wrist_Pitch         (not used in 2-DOF)
+#   4 = Wrist_Roll          (not used)
+#   5 = Gripper             (not used)
 # -----------------------------------------------------------------------
-servo_id_j1: 2   # Shoulder_Pitch
-servo_id_j2: 3   # Elbow
+servo_id_j1: 1   # Shoulder_Pitch
+servo_id_j2: 2   # Elbow
 
 # -----------------------------------------------------------------------
 # Joint names (must match existing ROS2 topic and controller config)

@@ -144,9 +144,9 @@ class FeetechDriver:
 
         drv = FeetechDriver('/dev/serial/by-id/usb-...-if00', baud=1_000_000)
         drv.open()
-        drv.enable_torque(servo_id=2)
-        pos_rad = drv.read_position(servo_id=2)
-        drv.write_position(servo_id=2, angle_rad=0.5)
+        drv.enable_torque(servo_id=1)
+        pos_rad = drv.read_position(servo_id=1)
+        drv.write_position(servo_id=1, angle_rad=0.5)
         drv.close()
     """
 
@@ -154,7 +154,8 @@ class FeetechDriver:
         self,
         port: str,
         baud: int = 1_000_000,
-        read_timeout: float = 0.05,
+        read_timeout: float = 0.10,
+        max_retries: int = 2,
     ):
         if serial is None:
             raise RuntimeError(
@@ -163,6 +164,7 @@ class FeetechDriver:
         self.port         = port
         self.baud         = baud
         self.read_timeout = read_timeout
+        self.max_retries  = max_retries
         self._ser         = None
 
     # ------------------------------------------------------------------
@@ -199,9 +201,19 @@ class FeetechDriver:
         self._ser.write(packet)
 
     def _recv(self, n_params: int) -> tuple:
-        """Read one status packet and return (error, params)."""
+        """Read one status packet and return (error, params).
+
+        Retries up to ``self.max_retries`` times on short reads so that
+        transient bus timing glitches do not immediately propagate as errors.
+        """
         expected = 6 + n_params  # header(2) + ID + LEN + ERROR + params + CS
         raw = self._ser.read(expected)
+        # Retry on short reads (transient bus timing issue)
+        for _ in range(self.max_retries):
+            if len(raw) >= expected:
+                break
+            time.sleep(0.005)
+            raw += self._ser.read(expected - len(raw))
         if len(raw) < 6:
             raise IOError(
                 f"Short read: expected {expected} bytes, got {len(raw)}"
