@@ -1,0 +1,15 @@
+# Python bytecode / pycache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Build artifacts (colcon)
+build/
+install/
+log/
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
