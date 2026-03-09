@@ -1,22 +1,19 @@
 """
-dual_hw.launch.py  —  Main hardware entry point
+dual_hw_freemodel.launch.py  —  Hardware entry point for the model-free pipeline
 
-Starts all four hardware components in the correct order:
+Identical to dual_hw.launch.py but with enable_leader_commands set to true so
+that fm_leader_hw can physically move the leader arm via position commands.
 
-  1. leader_hw_node    – reads leader arm servos → /so100/joint_states
-  2. follower_hw_node  – drives follower arm servos ← /so101/arm_position_controller/commands
-  3. relay_node        – /so100/joint_states → /so101/arm_position_controller/commands
-  4. csv_logger_node   – logs both joint_states to hardware/data/run_*.csv
+The relay_node is excluded here because fm_leader_hw / fm_follower_hw /
+fm_demo_hw manage the leader → follower command flow themselves.
 
 Usage:
-    ros2 launch so100_hardware_bringup dual_hw.launch.py
+    ros2 launch so100_hardware_bringup dual_hw_freemodel.launch.py
 
 Override any argument on the command line, e.g.:
-    ros2 launch so100_hardware_bringup dual_hw.launch.py \\
+    ros2 launch so100_hardware_bringup dual_hw_freemodel.launch.py \\
         leader_port:=/dev/ttyUSB0 \\
-        follower_port:=/dev/ttyUSB1 \\
-        rate_hz:=100.0 \\
-        data_dir:=/home/user/Modelfree/hardware/data
+        follower_port:=/dev/ttyUSB1
 """
 
 import os
@@ -29,23 +26,12 @@ from launch_ros.actions import Node
 
 
 def _default_data_dir() -> str:
-    """
-    Resolve the CSV output directory.
-
-    Priority:
-      1. HARDWARE_DATA_DIR environment variable
-      2. hardware/data/ under the current working directory (repo root)
-      3. hardware/data/ relative to this launch file (development tree)
-      4. ~/so100_hardware_data (fallback)
-    """
     env = os.environ.get('HARDWARE_DATA_DIR', '')
     if env:
         return env
-    # When ros2 launch is run from the repo root, CWD/hardware/data/ is correct
     cwd_candidate = Path.cwd() / 'hardware' / 'data'
     if cwd_candidate.is_dir():
         return str(cwd_candidate)
-    # Development: launch file at hardware/launch/dual_hw.launch.py
     launch_dir = Path(__file__).resolve().parent
     dev_candidate = launch_dir.parent / 'data'
     if dev_candidate.is_dir():
@@ -60,14 +46,12 @@ def generate_launch_description():
     # Launch arguments
     # ------------------------------------------------------------------
     args = [
-        # Leader serial device
         DeclareLaunchArgument(
             'leader_port',
             default_value='/dev/serial/by-id/'
                           'usb-1a86_USB_Single_Serial_5AAF218344-if00',
             description='Stable USB serial path for the leader arm',
         ),
-        # Follower serial device
         DeclareLaunchArgument(
             'follower_port',
             default_value='/dev/serial/by-id/'
@@ -110,20 +94,6 @@ def generate_launch_description():
             description='Follower servo ID for Elbow',
         ),
         DeclareLaunchArgument(
-            'scale',
-            default_value='1.0',
-            description='Relay scale factor (1.0 = direct mirror)',
-        ),
-        DeclareLaunchArgument(
-            'enable_leader_commands',
-            default_value='false',
-            description=(
-                'When true, the leader_hw_node will accept position commands '
-                'on /{ns}/arm_position_controller/commands and physically drive '
-                'the leader servos (used by fm_leader_hw pipeline).'
-            ),
-        ),
-        DeclareLaunchArgument(
             'data_dir',
             default_value=default_data,
             description='Directory where CSV log files are saved',
@@ -131,7 +101,7 @@ def generate_launch_description():
     ]
 
     # ------------------------------------------------------------------
-    # 1. Leader hardware node
+    # 1. Leader hardware node  (enable_commands=true for freemodel pipeline)
     # ------------------------------------------------------------------
     leader_node = Node(
         package    = 'so100_hardware_bringup',
@@ -139,13 +109,13 @@ def generate_launch_description():
         name       = 'leader_hw_node',
         output     = 'screen',
         parameters = [{
-            'serial_port':       LaunchConfiguration('leader_port'),
-            'baud_rate':         LaunchConfiguration('baud_rate'),
-            'rate_hz':           LaunchConfiguration('rate_hz'),
-            'servo_id_j1':       LaunchConfiguration('leader_servo_j1'),
-            'servo_id_j2':       LaunchConfiguration('leader_servo_j2'),
-            'namespace':         'so100',
-            'enable_commands':   LaunchConfiguration('enable_leader_commands'),
+            'serial_port':     LaunchConfiguration('leader_port'),
+            'baud_rate':       LaunchConfiguration('baud_rate'),
+            'rate_hz':         LaunchConfiguration('rate_hz'),
+            'servo_id_j1':     LaunchConfiguration('leader_servo_j1'),
+            'servo_id_j2':     LaunchConfiguration('leader_servo_j2'),
+            'namespace':       'so100',
+            'enable_commands': True,   # fm_leader_hw physically commands the leader arm
         }],
     )
 
@@ -169,24 +139,7 @@ def generate_launch_description():
     )
 
     # ------------------------------------------------------------------
-    # 3. Relay node  (leader joints → follower commands)
-    # ------------------------------------------------------------------
-    relay_node = Node(
-        package    = 'so100_hardware_bringup',
-        executable = 'relay_node',
-        name       = 'relay_node',
-        output     = 'screen',
-        parameters = [{
-            'leader_js_topic':    '/so100/joint_states',
-            'follower_cmd_topic': '/so101/arm_position_controller/commands',
-            'joint_name_j1':      'Shoulder_Pitch',
-            'joint_name_j2':      'Elbow',
-            'scale':              LaunchConfiguration('scale'),
-        }],
-    )
-
-    # ------------------------------------------------------------------
-    # 4. CSV logger node
+    # 3. CSV logger node  (no relay_node — freemodel nodes handle commands)
     # ------------------------------------------------------------------
     logger_node = Node(
         package    = 'so100_hardware_bringup',
@@ -194,18 +147,17 @@ def generate_launch_description():
         name       = 'csv_logger_node',
         output     = 'screen',
         parameters = [{
-            'leader_js_topic':    '/so100/joint_states',
-            'follower_js_topic':  '/so101/joint_states',
-            'joint_name_j1':      'Shoulder_Pitch',
-            'joint_name_j2':      'Elbow',
-            'data_dir':           LaunchConfiguration('data_dir'),
-            'rate_hz':            LaunchConfiguration('rate_hz'),
+            'leader_js_topic':   '/so100/joint_states',
+            'follower_js_topic': '/so101/joint_states',
+            'joint_name_j1':     'Shoulder_Pitch',
+            'joint_name_j2':     'Elbow',
+            'data_dir':          LaunchConfiguration('data_dir'),
+            'rate_hz':           LaunchConfiguration('rate_hz'),
         }],
     )
 
     return LaunchDescription(args + [
         leader_node,
         follower_node,
-        relay_node,
         logger_node,
     ])
