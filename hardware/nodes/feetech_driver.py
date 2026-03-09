@@ -19,7 +19,6 @@ Position encoding:
 """
 
 import math
-import struct
 import time
 import logging
 

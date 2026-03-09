@@ -21,9 +21,6 @@ Parameters:
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import (
-    QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy,
-)
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64MultiArray
 
@@ -63,19 +60,11 @@ class RelayNode(Node):
         # ------------------------------------------------------------------
         # ROS interfaces
         # ------------------------------------------------------------------
-        # Use BEST_EFFORT QoS to match the hardware node's joint_states QoS
-        js_qos = QoSProfile(
-            history     = HistoryPolicy.KEEP_LAST,
-            depth       = 10,
-            reliability = ReliabilityPolicy.BEST_EFFORT,
-            durability  = DurabilityPolicy.VOLATILE,
-        )
-
         self.sub = self.create_subscription(
             JointState,
             leader_topic,
             self._js_cb,
-            js_qos,
+            10,
         )
         self.pub = self.create_publisher(
             Float64MultiArray,

@@ -64,15 +64,15 @@ class FollowerHwNode(Node):
         self.declare_parameter('rate_hz',       50.0)
         self.declare_parameter('goal_speed',    200)   # 0 = max speed
 
-        port       = self.get_parameter('serial_port').value
-        baud       = self.get_parameter('baud_rate').value
-        self.id1   = self.get_parameter('servo_id_j1').value
-        self.id2   = self.get_parameter('servo_id_j2').value
-        self.j1    = self.get_parameter('joint_name_j1').value
-        self.j2    = self.get_parameter('joint_name_j2').value
-        ns         = self.get_parameter('namespace').value
-        rate_hz    = self.get_parameter('rate_hz').value
-        self.speed = self.get_parameter('goal_speed').value
+        port       = str(self.get_parameter('serial_port').value)
+        baud       = int(self.get_parameter('baud_rate').value)
+        self.id1   = int(self.get_parameter('servo_id_j1').value)
+        self.id2   = int(self.get_parameter('servo_id_j2').value)
+        self.j1    = str(self.get_parameter('joint_name_j1').value)
+        self.j2    = str(self.get_parameter('joint_name_j2').value)
+        ns         = str(self.get_parameter('namespace').value)
+        rate_hz    = float(self.get_parameter('rate_hz').value)
+        self.speed = int(self.get_parameter('goal_speed').value)
 
         # Pending command buffer (updated by subscription callback)
         self._pending_cmd = None
@@ -100,7 +100,7 @@ class FollowerHwNode(Node):
                     f"[follower] Servo ID {sid} ({name}) torque enabled ✓"
                 )
             else:
-                self.get_logger().warn(
+                self.get_logger().warning(
                     f"[follower] Servo ID {sid} ({name}) did NOT respond to ping"
                 )
 
