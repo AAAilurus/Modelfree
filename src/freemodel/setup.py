@@ -21,6 +21,9 @@ setup(
             'fm_follower = freemodel.fm_follower:main',
             'fm_demo = freemodel.fm_demo:main',
             'fm_offline_spsa = freemodel.fm_offline_spsa:main',
+            'fm_leader_hw = freemodel.fm_leader_hw:main',
+            'fm_follower_hw = freemodel.fm_follower_hw:main',
+            'fm_demo_hw = freemodel.fm_demo_hw:main',
         ],
     },
 )
