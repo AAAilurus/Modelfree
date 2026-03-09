@@ -53,14 +53,14 @@ class LeaderHwNode(Node):
         self.declare_parameter('namespace',     'so100')
         self.declare_parameter('rate_hz',       50.0)
 
-        port      = self.get_parameter('serial_port').value
-        baud      = self.get_parameter('baud_rate').value
-        self.id1  = self.get_parameter('servo_id_j1').value
-        self.id2  = self.get_parameter('servo_id_j2').value
-        self.j1   = self.get_parameter('joint_name_j1').value
-        self.j2   = self.get_parameter('joint_name_j2').value
-        ns        = self.get_parameter('namespace').value
-        rate_hz   = self.get_parameter('rate_hz').value
+        port      = str(self.get_parameter('serial_port').value)
+        baud      = int(self.get_parameter('baud_rate').value)
+        self.id1  = int(self.get_parameter('servo_id_j1').value)
+        self.id2  = int(self.get_parameter('servo_id_j2').value)
+        self.j1   = str(self.get_parameter('joint_name_j1').value)
+        self.j2   = str(self.get_parameter('joint_name_j2').value)
+        ns        = str(self.get_parameter('namespace').value)
+        rate_hz   = float(self.get_parameter('rate_hz').value)
 
         # ------------------------------------------------------------------
         # Serial driver
@@ -84,9 +84,16 @@ class LeaderHwNode(Node):
                     f"[leader] Servo ID {sid} ({name}) responded to ping ✓"
                 )
             else:
-                self.get_logger().warn(
+                self.get_logger().warning(
                     f"[leader] Servo ID {sid} ({name}) did NOT respond to ping"
                 )
+
+        # Disable torque so the leader arm can be moved freely by hand
+        for sid, name in [(self.id1, self.j1), (self.id2, self.j2)]:
+            self.driver.disable_torque(sid)
+            self.get_logger().info(
+                f"[leader] Servo ID {sid} ({name}) torque disabled (free to move by hand)"
+            )
 
         # ------------------------------------------------------------------
         # ROS publisher

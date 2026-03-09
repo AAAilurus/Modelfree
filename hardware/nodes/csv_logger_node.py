@@ -23,15 +23,11 @@ Parameters:
 
 import csv
 import os
-import sys
 import time
 from pathlib import Path
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import (
-    QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy,
-)
 from sensor_msgs.msg import JointState
 
 
@@ -110,17 +106,10 @@ class CsvLoggerNode(Node):
         self.get_logger().info(f'[logger] CSV → {self._path}')
 
         # ------------------------------------------------------------------
-        # ROS subscriptions  (BEST_EFFORT to match hardware node QoS)
+        # ROS subscriptions
         # ------------------------------------------------------------------
-        js_qos = QoSProfile(
-            history     = HistoryPolicy.KEEP_LAST,
-            depth       = 10,
-            reliability = ReliabilityPolicy.BEST_EFFORT,
-            durability  = DurabilityPolicy.VOLATILE,
-        )
-
-        self.create_subscription(JointState, leader_topic,   self._leader_cb,   js_qos)
-        self.create_subscription(JointState, follower_topic, self._follower_cb, js_qos)
+        self.create_subscription(JointState, leader_topic,   self._leader_cb,   10)
+        self.create_subscription(JointState, follower_topic, self._follower_cb, 10)
 
         # ------------------------------------------------------------------
         # Logging timer
