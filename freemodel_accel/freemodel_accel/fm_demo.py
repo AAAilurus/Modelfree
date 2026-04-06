@@ -14,12 +14,12 @@ from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 
 def load_matrix_csv(file_path, shape=None):
-    matrix_data = np.genfromtxt(file_path, delimiter=",", dtype=float, skip_header=1)
-    matrix_data = np.atleast_2d(matrix_data)
-    matrix_data = matrix_data[np.all(np.isfinite(matrix_data), axis=1)]
+    data = np.genfromtxt(file_path, delimiter=",", dtype=float, skip_header=1)
+    data = np.atleast_2d(data)
+    data = data[np.all(np.isfinite(data), axis=1)]
     if shape is not None:
-        matrix_data = matrix_data.reshape(shape)
-    return matrix_data
+        data = data.reshape(shape)
+    return data
 
 
 class FreeModelDemo(Node):
@@ -27,501 +27,370 @@ class FreeModelDemo(Node):
         super().__init__("fm_demo")
         self.set_parameters([Parameter("use_sim_time", Parameter.Type.BOOL, True)])
 
-        self.declare_parameter("control_rate_hz", 10.0)
+        self.declare_parameter("joint_names", ["Shoulder_Pitch", "Elbow"])
         self.declare_parameter("initial_joint_position", [0.0, 0.0])
         self.declare_parameter(
             "target_joint_positions_flat",
             [0.5, -0.6, 0.3, 0.4, -0.4, 0.5, -0.5, -0.2]
         )
-        self.declare_parameter("initial_settle_time_seconds", 2.0)
-        self.declare_parameter("time_per_target_seconds", 4.0)
-        self.declare_parameter("hold_time_at_target_seconds", 1.0)
-        self.declare_parameter("return_to_initial_time_seconds", 3.0)
+
+        self.declare_parameter("control_rate_hz", 30.0)
+        self.declare_parameter("trajectory_command_duration_seconds", 0.18)
+        self.declare_parameter("move_time_per_waypoint_seconds", 3.0)
+        self.declare_parameter("hold_time_at_target_seconds", 3.0)
         self.declare_parameter("hold_time_at_initial_seconds", 1.0)
-        self.declare_parameter("transition_time_seconds", 1.0)
-        self.declare_parameter("position_step_scale", 0.005)
-        self.declare_parameter("trajectory_command_duration_seconds", 0.1)
         self.declare_parameter("output_directory", "/root/Modelfree/freemodel_out")
-        self.declare_parameter("joint_names", ["Shoulder_Pitch", "Elbow"])
 
-        self.control_period_seconds = 1.0 / float(self.get_parameter("control_rate_hz").value)
-        self.initial_joint_position = np.array(self.get_parameter("initial_joint_position").value, dtype=float)
-        self.initial_settle_time_seconds = float(self.get_parameter("initial_settle_time_seconds").value)
-        self.time_per_target_seconds = float(self.get_parameter("time_per_target_seconds").value)
-        self.hold_time_at_target_seconds = float(self.get_parameter("hold_time_at_target_seconds").value)
-        self.return_to_initial_time_seconds = float(self.get_parameter("return_to_initial_time_seconds").value)
-        self.hold_time_at_initial_seconds = float(self.get_parameter("hold_time_at_initial_seconds").value)
-        self.transition_time_seconds = float(self.get_parameter("transition_time_seconds").value)
-        self.position_step_scale = float(self.get_parameter("position_step_scale").value)
-        self.trajectory_command_duration_seconds = float(
-            self.get_parameter("trajectory_command_duration_seconds").value
-        )
-        self.output_directory = str(self.get_parameter("output_directory").value)
         self.joint_names = list(self.get_parameter("joint_names").value)
+        self.num_joints = len(self.joint_names)
 
-        target_joint_positions_flat = list(self.get_parameter("target_joint_positions_flat").value)
-        if len(target_joint_positions_flat) % 2 != 0:
-            raise RuntimeError("target_joint_positions_flat must contain an even number of values")
+        self.initial_joint_position = np.array(
+            self.get_parameter("initial_joint_position").value, dtype=float
+        )
 
-        self.target_joint_positions_list = [
-            np.array(target_joint_positions_flat[index:index + 2], dtype=float)
-            for index in range(0, len(target_joint_positions_flat), 2)
+        flat = list(self.get_parameter("target_joint_positions_flat").value)
+        if len(flat) % self.num_joints != 0:
+            raise RuntimeError("target_joint_positions_flat length must be multiple of num_joints")
+
+        self.targets = [
+            np.array(flat[i:i+self.num_joints], dtype=float)
+            for i in range(0, len(flat), self.num_joints)
         ]
+        self.sequence = [self.initial_joint_position.copy()] + [q.copy() for q in self.targets] + [self.initial_joint_position.copy()]
 
-        self.initial_settle_steps = int(round(self.initial_settle_time_seconds / self.control_period_seconds))
-        self.time_per_target_steps = int(round(self.time_per_target_seconds / self.control_period_seconds))
-        self.hold_time_at_target_steps = int(round(self.hold_time_at_target_seconds / self.control_period_seconds))
-        self.return_to_initial_steps = int(round(self.return_to_initial_time_seconds / self.control_period_seconds))
-        self.hold_time_at_initial_steps = int(round(self.hold_time_at_initial_seconds / self.control_period_seconds))
-        self.transition_steps = max(1, int(round(self.transition_time_seconds / self.control_period_seconds)))
+        self.dt = 1.0 / float(self.get_parameter("control_rate_hz").value)
+        self.command_duration = float(self.get_parameter("trajectory_command_duration_seconds").value)
+        self.move_time_per_waypoint_seconds = float(self.get_parameter("move_time_per_waypoint_seconds").value)
+        self.hold_time_at_target_seconds = float(self.get_parameter("hold_time_at_target_seconds").value)
+        self.hold_time_at_initial_seconds = float(self.get_parameter("hold_time_at_initial_seconds").value)
+        self.output_directory = str(self.get_parameter("output_directory").value)
 
-        if self.hold_time_at_target_steps >= self.time_per_target_steps:
-            raise RuntimeError("hold_time_at_target_seconds must be smaller than time_per_target_seconds")
-        if self.hold_time_at_initial_steps >= self.return_to_initial_steps:
-            raise RuntimeError("hold_time_at_initial_seconds must be smaller than return_to_initial_time_seconds")
+        self.move_steps_per_waypoint = max(1, int(round(self.move_time_per_waypoint_seconds / self.dt)))
+        self.hold_steps_target = max(1, int(round(self.hold_time_at_target_seconds / self.dt)))
+        self.hold_steps_initial = max(1, int(round(self.hold_time_at_initial_seconds / self.dt)))
 
         self.true_controller_gain = load_matrix_csv(
             os.path.join(self.output_directory, "K_star.csv"),
-            shape=(2, 4)
+            shape=(self.num_joints, 2 * self.num_joints),
         )
         self.learned_controller_gain = load_matrix_csv(
             os.path.join(self.output_directory, "K_learned.csv"),
-            shape=(2, 4)
+            shape=(self.num_joints, 2 * self.num_joints),
         )
 
-        self.current_leader_joint_position = np.zeros(2, dtype=float)
-        self.current_leader_joint_velocity = np.zeros(2, dtype=float)
-        self.current_follower_joint_position = np.zeros(2, dtype=float)
-        self.current_follower_joint_velocity = np.zeros(2, dtype=float)
+        self.current_leader_q = np.zeros(self.num_joints)
+        self.current_follower_q = np.zeros(self.num_joints)
+        self.current_leader_dq = np.zeros(self.num_joints)
+        self.current_follower_dq = np.zeros(self.num_joints)
 
-        self.received_leader_joint_state = False
-        self.received_follower_joint_state = False
+        self.leader_cmd_q = None
+        self.follower_cmd_q = None
+        self.leader_cmd_dq = None
+        self.follower_cmd_dq = None
 
-        self.demo_phase = "move_to_initial_position"
-        self.current_target_index = 0
+        self.last_u_leader = np.zeros(self.num_joints)
+        self.last_u_follower = np.zeros(self.num_joints)
+
+        self.got_leader = False
+        self.got_follower = False
+        self.states_initialized = False
+
+        self.current_index = 0
+        self.current_waypoint = self.sequence[self.current_index].copy()
+        self.phase = "move"
         self.phase_step_counter = 0
         self.demo_finished = False
-        self.transition_start_joint_position = None
-        self.transition_end_joint_position = None
-
-        self.logged_time = []
-        self.logged_desired_joint_position = []
-        self.logged_leader_joint_position = []
-        self.logged_leader_joint_velocity = []
-        self.logged_follower_joint_position = []
-        self.logged_follower_joint_velocity = []
-        self.logged_phase = []
 
         self.plot_directory = os.path.join(self.output_directory, "plots")
         self.log_directory = os.path.join(self.output_directory, "logs")
         os.makedirs(self.plot_directory, exist_ok=True)
         os.makedirs(self.log_directory, exist_ok=True)
 
-        self.create_subscription(
-            JointState,
-            "/so100/joint_states",
-            self.leader_joint_state_callback,
-            10
+        self.logged_time = []
+        self.logged_desired_q = []
+        self.logged_leader_q = []
+        self.logged_follower_q = []
+        self.logged_leader_dq = []
+        self.logged_follower_dq = []
+        self.logged_leader_u = []
+        self.logged_follower_u = []
+        self.logged_phase = []
+        self.logged_waypoint = []
+
+        self.create_subscription(JointState, "/so100/joint_states", self.leader_cb, 10)
+        self.create_subscription(JointState, "/so101/joint_states", self.follower_cb, 10)
+
+        self.pub_leader = self.create_publisher(
+            JointTrajectory, "/so100/joint_trajectory_controller/joint_trajectory", 10
         )
-        self.create_subscription(
-            JointState,
-            "/so101/joint_states",
-            self.follower_joint_state_callback,
-            10
+        self.pub_follower = self.create_publisher(
+            JointTrajectory, "/so101/joint_trajectory_controller/joint_trajectory", 10
         )
 
-        self.leader_trajectory_publisher = self.create_publisher(
-            JointTrajectory,
-            "/so100/joint_trajectory_controller/joint_trajectory",
-            10
-        )
-        self.follower_trajectory_publisher = self.create_publisher(
-            JointTrajectory,
-            "/so101/joint_trajectory_controller/joint_trajectory",
-            10
-        )
+        self.timer = self.create_timer(self.dt, self.step)
 
-        self.control_timer = self.create_timer(self.control_period_seconds, self.run_demo_step)
+        self.get_logger().info("[fm_demo] PURE u-based double-integrator, q_cmd only")
+        self.get_logger().info("[fm_demo] leader uses K_star, follower uses K_learned")
+        self.get_logger().info(f"[fm_demo] sequence={[q.tolist() for q in self.sequence]}")
 
-        self.get_logger().info(
-            f"[fm_demo] initial_joint_position={self.initial_joint_position.tolist()} "
-            f"target_joint_positions_list={[target.tolist() for target in self.target_joint_positions_list]}"
-        )
-
-    def extract_selected_joint_state(self, joint_state_message):
+    def extract_state(self, msg):
         try:
-            selected_joint_indices = [joint_state_message.name.index(joint_name) for joint_name in self.joint_names]
+            idx = [msg.name.index(j) for j in self.joint_names]
         except ValueError:
             return None, None
+        q = np.array([msg.position[i] for i in idx], dtype=float)
+        dq = np.array([msg.velocity[i] if i < len(msg.velocity) else 0.0 for i in idx], dtype=float)
+        return q, dq
 
-        selected_joint_position = np.array(
-            [joint_state_message.position[index] for index in selected_joint_indices],
-            dtype=float
-        )
-        selected_joint_velocity = np.array(
-            [
-                joint_state_message.velocity[index] if index < len(joint_state_message.velocity) else 0.0
-                for index in selected_joint_indices
-            ],
-            dtype=float
-        )
-        return selected_joint_position, selected_joint_velocity
+    def leader_cb(self, msg):
+        q, dq = self.extract_state(msg)
+        if q is None:
+            return
+        self.current_leader_q = q
+        self.current_leader_dq = dq
+        self.got_leader = True
 
-    def leader_joint_state_callback(self, joint_state_message):
-        selected_joint_position, selected_joint_velocity = self.extract_selected_joint_state(joint_state_message)
-        if selected_joint_position is not None:
-            self.current_leader_joint_position = selected_joint_position
-            self.current_leader_joint_velocity = selected_joint_velocity
-            self.received_leader_joint_state = True
+    def follower_cb(self, msg):
+        q, dq = self.extract_state(msg)
+        if q is None:
+            return
+        self.current_follower_q = q
+        self.current_follower_dq = dq
+        self.got_follower = True
 
-    def follower_joint_state_callback(self, joint_state_message):
-        selected_joint_position, selected_joint_velocity = self.extract_selected_joint_state(joint_state_message)
-        if selected_joint_position is not None:
-            self.current_follower_joint_position = selected_joint_position
-            self.current_follower_joint_velocity = selected_joint_velocity
-            self.received_follower_joint_state = True
-
-    def publish_joint_position_command(self, trajectory_publisher, commanded_joint_position):
-        trajectory_message = JointTrajectory()
-        trajectory_message.joint_names = list(self.joint_names)
-
-        trajectory_point = JointTrajectoryPoint()
-        trajectory_point.positions = commanded_joint_position.tolist()
-        trajectory_point.velocities = [0.0, 0.0]
-        trajectory_point.time_from_start.sec = int(self.trajectory_command_duration_seconds)
-        trajectory_point.time_from_start.nanosec = int(
-            (self.trajectory_command_duration_seconds - int(self.trajectory_command_duration_seconds)) * 1e9
-        )
-
-        trajectory_message.points = [trajectory_point]
-        trajectory_publisher.publish(trajectory_message)
-
-    def is_hold_subphase_for_target(self):
-        return self.phase_step_counter >= (self.time_per_target_steps - self.hold_time_at_target_steps)
-
-    def is_hold_subphase_for_return(self):
-        return self.phase_step_counter >= (self.return_to_initial_steps - self.hold_time_at_initial_steps)
-
-    def get_interpolated_target_joint_position(self):
-        alpha = min(1.0, self.phase_step_counter / max(1, self.transition_steps))
-        return (1.0 - alpha) * self.transition_start_joint_position + alpha * self.transition_end_joint_position
-
-    def save_logged_data_and_plot(self):
-        if len(self.logged_time) == 0:
+    def initialize_if_needed(self):
+        if self.states_initialized:
+            return
+        if not (self.got_leader and self.got_follower):
             return
 
-        time_array = np.array(self.logged_time)
-        desired_joint_position_array = np.array(self.logged_desired_joint_position)
-        leader_joint_position_array = np.array(self.logged_leader_joint_position)
-        leader_joint_velocity_array = np.array(self.logged_leader_joint_velocity)
-        follower_joint_position_array = np.array(self.logged_follower_joint_position)
-        follower_joint_velocity_array = np.array(self.logged_follower_joint_velocity)
+        self.leader_cmd_q = self.current_leader_q.copy()
+        self.follower_cmd_q = self.current_follower_q.copy()
+        self.leader_cmd_dq = np.zeros(self.num_joints)
+        self.follower_cmd_dq = np.zeros(self.num_joints)
+
+        self.states_initialized = True
+
+    def publish_position_command(self, pub, q_cmd):
+        msg = JointTrajectory()
+        msg.joint_names = list(self.joint_names)
+        pt = JointTrajectoryPoint()
+        pt.positions = q_cmd.tolist()
+        pt.time_from_start.sec = int(self.command_duration)
+        pt.time_from_start.nanosec = int((self.command_duration - int(self.command_duration)) * 1e9)
+        msg.points = [pt]
+        pub.publish(msg)
+
+    def required_hold_steps(self):
+        if self.current_index == 0 or self.current_index == len(self.sequence) - 1:
+            return self.hold_steps_initial
+        return self.hold_steps_target
+
+    def step_controller(self, cmd_q, cmd_dq, q, dq, q_des, K):
+        e = np.hstack([q - q_des, dq])
+        u = -K @ e
+        cmd_dq_new = cmd_dq + u * self.dt
+        cmd_q_new = cmd_q + cmd_dq * self.dt + 0.5 * u * (self.dt ** 2)
+        return cmd_q_new, cmd_dq_new, u
+
+    def freeze_hold_states(self):
+        self.leader_cmd_q = self.current_waypoint.copy()
+        self.follower_cmd_q = self.current_waypoint.copy()
+        self.leader_cmd_dq[:] = 0.0
+        self.follower_cmd_dq[:] = 0.0
+        self.last_u_leader[:] = 0.0
+        self.last_u_follower[:] = 0.0
+
+    def advance_waypoint(self):
+        self.current_index += 1
+        self.phase = "move"
+        self.phase_step_counter = 0
+
+        if self.current_index >= len(self.sequence):
+            self.demo_finished = True
+            self.timer.cancel()
+            self.save_outputs()
+            self.get_logger().info("[fm_demo] demo completed")
+            return
+
+        self.current_waypoint = self.sequence[self.current_index].copy()
+        self.leader_cmd_q = self.current_leader_q.copy()
+        self.follower_cmd_q = self.current_follower_q.copy()
+        self.leader_cmd_dq = np.zeros(self.num_joints)
+        self.follower_cmd_dq = np.zeros(self.num_joints)
+        self.last_u_leader[:] = 0.0
+        self.last_u_follower[:] = 0.0
+
+        self.get_logger().info(
+            f"[fm_demo] next waypoint {self.current_index + 1}/{len(self.sequence)} {self.current_waypoint.tolist()}"
+        )
+
+    def log_step(self, t):
+        self.logged_time.append(t)
+        self.logged_desired_q.append(self.current_waypoint.copy())
+        self.logged_leader_q.append(self.current_leader_q.copy())
+        self.logged_follower_q.append(self.current_follower_q.copy())
+
+        if self.phase == "hold":
+            self.logged_leader_dq.append(np.zeros(self.num_joints))
+            self.logged_follower_dq.append(np.zeros(self.num_joints))
+            self.logged_leader_u.append(np.zeros(self.num_joints))
+            self.logged_follower_u.append(np.zeros(self.num_joints))
+        else:
+            self.logged_leader_dq.append(self.current_leader_dq.copy())
+            self.logged_follower_dq.append(self.current_follower_dq.copy())
+            self.logged_leader_u.append(self.last_u_leader.copy())
+            self.logged_follower_u.append(self.last_u_follower.copy())
+
+        self.logged_phase.append(self.phase)
+        self.logged_waypoint.append(self.current_index)
+
+    def save_outputs(self):
+        if not self.logged_time:
+            return
+
+        t = np.array(self.logged_time)
+        qd = np.array(self.logged_desired_q)
+        qL = np.array(self.logged_leader_q)
+        qF = np.array(self.logged_follower_q)
+        dqL = np.array(self.logged_leader_dq)
+        dqF = np.array(self.logged_follower_dq)
+        uL = np.array(self.logged_leader_u)
+        uF = np.array(self.logged_follower_u)
 
         csv_path = os.path.join(self.log_directory, "four_state_demo_log.csv")
-        with open(csv_path, "w", newline="") as csv_file:
-            csv_writer = csv.writer(csv_file)
-            csv_writer.writerow([
-                "time",
-                "desired_q1", "desired_q2",
-                "leader_q1", "leader_q2",
-                "leader_dq1", "leader_dq2",
-                "follower_q1", "follower_q2",
-                "follower_dq1", "follower_dq2",
-                "phase"
-            ])
-            for index in range(len(time_array)):
-                csv_writer.writerow([
-                    time_array[index],
-                    desired_joint_position_array[index, 0], desired_joint_position_array[index, 1],
-                    leader_joint_position_array[index, 0], leader_joint_position_array[index, 1],
-                    leader_joint_velocity_array[index, 0], leader_joint_velocity_array[index, 1],
-                    follower_joint_position_array[index, 0], follower_joint_position_array[index, 1],
-                    follower_joint_velocity_array[index, 0], follower_joint_velocity_array[index, 1],
-                    self.logged_phase[index]
-                ])
+        with open(csv_path, "w", newline="") as f:
+            w = csv.writer(f)
+            header = ["time"]
+            for j in range(self.num_joints):
+                header.append(f"desired_q{j+1}")
+            for j in range(self.num_joints):
+                header.append(f"leader_q{j+1}")
+            for j in range(self.num_joints):
+                header.append(f"leader_dq{j+1}")
+            for j in range(self.num_joints):
+                header.append(f"leader_u{j+1}")
+            for j in range(self.num_joints):
+                header.append(f"follower_q{j+1}")
+            for j in range(self.num_joints):
+                header.append(f"follower_dq{j+1}")
+            for j in range(self.num_joints):
+                header.append(f"follower_u{j+1}")
+            header.extend(["phase", "waypoint_index"])
+            w.writerow(header)
 
-        figure, axes = plt.subplots(2, 2, figsize=(11, 7), sharex=True)
-        figure.suptitle("Leader vs Follower Four-State Graph", fontsize=15, fontweight="bold")
+            for i in range(len(t)):
+                row = [t[i]]
+                row.extend(qd[i].tolist())
+                row.extend(qL[i].tolist())
+                row.extend(dqL[i].tolist())
+                row.extend(uL[i].tolist())
+                row.extend(qF[i].tolist())
+                row.extend(dqF[i].tolist())
+                row.extend(uF[i].tolist())
+                row.extend([self.logged_phase[i], self.logged_waypoint[i]])
+                w.writerow(row)
 
-        axes[0, 0].plot(time_array, leader_joint_position_array[:, 0], label="Leader q1")
-        axes[0, 0].plot(time_array, follower_joint_position_array[:, 0], "--", label="Follower q1")
-        axes[0, 0].plot(time_array, desired_joint_position_array[:, 0], ":", label="Desired q1")
-        axes[0, 0].grid(True, alpha=0.3)
-        axes[0, 0].legend()
+        fig, ax = plt.subplots(2, 2, figsize=(11, 7), sharex=True)
+        fig.suptitle("Leader vs Follower Four-State Graph", fontsize=15, fontweight="bold")
 
-        axes[0, 1].plot(time_array, leader_joint_position_array[:, 1], label="Leader q2")
-        axes[0, 1].plot(time_array, follower_joint_position_array[:, 1], "--", label="Follower q2")
-        axes[0, 1].plot(time_array, desired_joint_position_array[:, 1], ":", label="Desired q2")
-        axes[0, 1].grid(True, alpha=0.3)
-        axes[0, 1].legend()
+        ax[0, 0].plot(t, qL[:, 0], label="Leader q1")
+        ax[0, 0].plot(t, qF[:, 0], "--", label="Follower q1")
+        ax[0, 0].plot(t, qd[:, 0], ":", label="Desired q1")
+        ax[0, 0].grid(True, alpha=0.3)
+        ax[0, 0].legend()
 
-        axes[1, 0].plot(time_array, leader_joint_velocity_array[:, 0], label="Leader dq1")
-        axes[1, 0].plot(time_array, follower_joint_velocity_array[:, 0], "--", label="Follower dq1")
-        axes[1, 0].grid(True, alpha=0.3)
-        axes[1, 0].legend()
+        ax[0, 1].plot(t, qL[:, 1], label="Leader q2")
+        ax[0, 1].plot(t, qF[:, 1], "--", label="Follower q2")
+        ax[0, 1].plot(t, qd[:, 1], ":", label="Desired q2")
+        ax[0, 1].grid(True, alpha=0.3)
+        ax[0, 1].legend()
 
-        axes[1, 1].plot(time_array, leader_joint_velocity_array[:, 1], label="Leader dq2")
-        axes[1, 1].plot(time_array, follower_joint_velocity_array[:, 1], "--", label="Follower dq2")
-        axes[1, 1].grid(True, alpha=0.3)
-        axes[1, 1].legend()
+        ax[1, 0].plot(t, dqL[:, 0], label="Leader dq1")
+        ax[1, 0].plot(t, dqF[:, 0], "--", label="Follower dq1")
+        ax[1, 0].grid(True, alpha=0.3)
+        ax[1, 0].legend()
+
+        ax[1, 1].plot(t, dqL[:, 1], label="Leader dq2")
+        ax[1, 1].plot(t, dqF[:, 1], "--", label="Follower dq2")
+        ax[1, 1].grid(True, alpha=0.3)
+        ax[1, 1].legend()
 
         plt.tight_layout()
         plot_path = os.path.join(self.plot_directory, "leader_follower_four_state_graph.png")
         plt.savefig(plot_path, dpi=200)
-        plt.close(figure)
+        plt.close(fig)
 
         self.get_logger().info(f"[fm_demo] saved log -> {csv_path}")
         self.get_logger().info(f"[fm_demo] saved plot -> {plot_path}")
 
-    def run_demo_step(self):
-        if not (self.received_leader_joint_state and self.received_follower_joint_state):
+    def step(self):
+        if not (self.got_leader and self.got_follower):
             return
-
         if self.demo_finished:
             return
 
-        current_time_seconds = len(self.logged_time) * self.control_period_seconds
+        self.initialize_if_needed()
+        if not self.states_initialized:
+            return
 
-        if self.demo_phase == "move_to_initial_position":
-            self.publish_joint_position_command(
-                self.leader_trajectory_publisher,
-                self.initial_joint_position
+        t = len(self.logged_time) * self.dt
+        self.phase_step_counter += 1
+
+        if self.phase == "move":
+            self.leader_cmd_q, self.leader_cmd_dq, self.last_u_leader = self.step_controller(
+                self.leader_cmd_q,
+                self.leader_cmd_dq,
+                self.current_leader_q,
+                self.current_leader_dq,
+                self.current_waypoint,
+                self.true_controller_gain,
             )
-            self.publish_joint_position_command(
-                self.follower_trajectory_publisher,
-                self.initial_joint_position
+            self.follower_cmd_q, self.follower_cmd_dq, self.last_u_follower = self.step_controller(
+                self.follower_cmd_q,
+                self.follower_cmd_dq,
+                self.current_follower_q,
+                self.current_follower_dq,
+                self.current_waypoint,
+                self.learned_controller_gain,
             )
 
-            self.logged_time.append(current_time_seconds)
-            self.logged_desired_joint_position.append(self.initial_joint_position.copy())
-            self.logged_leader_joint_position.append(self.current_leader_joint_position.copy())
-            self.logged_leader_joint_velocity.append(self.current_leader_joint_velocity.copy())
-            self.logged_follower_joint_position.append(self.current_follower_joint_position.copy())
-            self.logged_follower_joint_velocity.append(self.current_follower_joint_velocity.copy())
-            self.logged_phase.append("initial_settle")
+            self.publish_position_command(self.pub_leader, self.leader_cmd_q)
+            self.publish_position_command(self.pub_follower, self.follower_cmd_q)
 
-            self.phase_step_counter += 1
-            if self.phase_step_counter >= self.initial_settle_steps:
-                self.demo_phase = "transition_to_target"
+            if self.phase_step_counter >= self.move_steps_per_waypoint:
+                self.phase = "hold"
                 self.phase_step_counter = 0
-                self.current_target_index = 0
-                self.transition_start_joint_position = self.initial_joint_position.copy()
-                self.transition_end_joint_position = self.target_joint_positions_list[0].copy()
-                self.get_logger().info(
-                    f"[fm_demo] transitioning to target 1/{len(self.target_joint_positions_list)} "
-                    f"{self.target_joint_positions_list[0].tolist()}"
-                )
-            return
+                self.freeze_hold_states()
 
-        if self.demo_phase == "transition_to_target":
-            current_target_joint_position = self.get_interpolated_target_joint_position()
+        elif self.phase == "hold":
+            self.freeze_hold_states()
+            self.publish_position_command(self.pub_leader, self.current_waypoint)
+            self.publish_position_command(self.pub_follower, self.current_waypoint)
 
-            leader_state_error = np.hstack([
-                self.current_leader_joint_position - current_target_joint_position,
-                self.current_leader_joint_velocity
-            ])
-            follower_state_error = np.hstack([
-                self.current_follower_joint_position - current_target_joint_position,
-                self.current_follower_joint_velocity
-            ])
+            if self.phase_step_counter >= self.required_hold_steps():
+                self.advance_waypoint()
+                self.log_step(t)
+                return
 
-            leader_control_input = -self.true_controller_gain @ leader_state_error
-            # limit acceleration for smooth motion
-            max_acc = 0.15
-            leader_control_input = np.clip(leader_control_input, -max_acc, max_acc)
-            follower_control_input = -self.learned_controller_gain @ follower_state_error
-            follower_control_input = np.clip(follower_control_input, -max_acc, max_acc)
-
-            leader_commanded_joint_position = (
-                self.current_leader_joint_position
-                + self.position_step_scale * leader_control_input
-            )
-            follower_commanded_joint_position = (
-                self.current_follower_joint_position
-                + self.position_step_scale * follower_control_input
-            )
-
-            self.publish_joint_position_command(
-                self.leader_trajectory_publisher,
-                leader_commanded_joint_position
-            )
-            self.publish_joint_position_command(
-                self.follower_trajectory_publisher,
-                follower_commanded_joint_position
-            )
-
-            self.logged_time.append(current_time_seconds)
-            self.logged_desired_joint_position.append(current_target_joint_position.copy())
-            self.logged_leader_joint_position.append(self.current_leader_joint_position.copy())
-            self.logged_leader_joint_velocity.append(self.current_leader_joint_velocity.copy())
-            self.logged_follower_joint_position.append(self.current_follower_joint_position.copy())
-            self.logged_follower_joint_velocity.append(self.current_follower_joint_velocity.copy())
-            self.logged_phase.append("target_transition")
-
-            self.phase_step_counter += 1
-            if self.phase_step_counter >= self.transition_steps:
-                self.demo_phase = "move_through_targets"
-                self.phase_step_counter = 0
-                self.get_logger().info(
-                    f"[fm_demo] starting hold/move on target {self.current_target_index + 1}/{len(self.target_joint_positions_list)} "
-                    f"{self.target_joint_positions_list[self.current_target_index].tolist()}"
-                )
-            return
-
-        if self.demo_phase == "move_through_targets":
-            current_target_joint_position = self.target_joint_positions_list[self.current_target_index]
-
-            if self.is_hold_subphase_for_target():
-                leader_commanded_joint_position = current_target_joint_position.copy()
-                follower_commanded_joint_position = current_target_joint_position.copy()
-                phase_name = "target_hold"
-            else:
-                leader_state_error = np.hstack([
-                    self.current_leader_joint_position - current_target_joint_position,
-                    self.current_leader_joint_velocity
-                ])
-                follower_state_error = np.hstack([
-                    self.current_follower_joint_position - current_target_joint_position,
-                    self.current_follower_joint_velocity
-                ])
-
-                leader_control_input = -self.true_controller_gain @ leader_state_error
-                follower_control_input = -self.learned_controller_gain @ follower_state_error
-
-                leader_commanded_joint_position = (
-                    self.current_leader_joint_position
-                    + self.position_step_scale * leader_control_input
-                )
-                follower_commanded_joint_position = (
-                    self.current_follower_joint_position
-                    + self.position_step_scale * follower_control_input
-                )
-                phase_name = "target_move"
-
-            self.publish_joint_position_command(
-                self.leader_trajectory_publisher,
-                leader_commanded_joint_position
-            )
-            self.publish_joint_position_command(
-                self.follower_trajectory_publisher,
-                follower_commanded_joint_position
-            )
-
-            if self.phase_step_counter % max(1, int(1.0 / self.control_period_seconds)) == 0:
-                subphase_name = "hold" if self.is_hold_subphase_for_target() else "move"
-                self.get_logger().info(
-                    f"[fm_demo] target {self.current_target_index + 1}/{len(self.target_joint_positions_list)} "
-                    f"subphase={subphase_name} "
-                    f"target_joint_position={np.round(current_target_joint_position, 3)} "
-                    f"leader_joint_position={np.round(self.current_leader_joint_position, 3)} "
-                    f"follower_joint_position={np.round(self.current_follower_joint_position, 3)}"
-                )
-
-            self.logged_time.append(current_time_seconds)
-            self.logged_desired_joint_position.append(current_target_joint_position.copy())
-            self.logged_leader_joint_position.append(self.current_leader_joint_position.copy())
-            self.logged_leader_joint_velocity.append(self.current_leader_joint_velocity.copy())
-            self.logged_follower_joint_position.append(self.current_follower_joint_position.copy())
-            self.logged_follower_joint_velocity.append(self.current_follower_joint_velocity.copy())
-            self.logged_phase.append(phase_name)
-
-            self.phase_step_counter += 1
-            if self.phase_step_counter >= self.time_per_target_steps:
-                self.current_target_index += 1
-                self.phase_step_counter = 0
-
-                if self.current_target_index >= len(self.target_joint_positions_list):
-                    self.demo_phase = "return_to_initial_position"
-                    self.get_logger().info("[fm_demo] all targets completed -> returning to initial_joint_position")
-                else:
-                    self.demo_phase = "transition_to_target"
-                    self.transition_start_joint_position = self.target_joint_positions_list[self.current_target_index - 1].copy()
-                    self.transition_end_joint_position = self.target_joint_positions_list[self.current_target_index].copy()
-                    self.get_logger().info(
-                        f"[fm_demo] transitioning to target {self.current_target_index + 1}/{len(self.target_joint_positions_list)} "
-                        f"{self.target_joint_positions_list[self.current_target_index].tolist()}"
-                    )
-            return
-
-        if self.demo_phase == "return_to_initial_position":
-            if self.is_hold_subphase_for_return():
-                leader_commanded_joint_position = self.initial_joint_position.copy()
-                follower_commanded_joint_position = self.initial_joint_position.copy()
-                phase_name = "return_hold"
-            else:
-                leader_state_error = np.hstack([
-                    self.current_leader_joint_position - self.initial_joint_position,
-                    self.current_leader_joint_velocity
-                ])
-                follower_state_error = np.hstack([
-                    self.current_follower_joint_position - self.initial_joint_position,
-                    self.current_follower_joint_velocity
-                ])
-
-                leader_control_input = -self.true_controller_gain @ leader_state_error
-                follower_control_input = -self.learned_controller_gain @ follower_state_error
-
-                leader_commanded_joint_position = (
-                    self.current_leader_joint_position
-                    + self.position_step_scale * leader_control_input
-                )
-                follower_commanded_joint_position = (
-                    self.current_follower_joint_position
-                    + self.position_step_scale * follower_control_input
-                )
-                phase_name = "return_move"
-
-            self.publish_joint_position_command(
-                self.leader_trajectory_publisher,
-                leader_commanded_joint_position
-            )
-            self.publish_joint_position_command(
-                self.follower_trajectory_publisher,
-                follower_commanded_joint_position
-            )
-
-            if self.phase_step_counter % max(1, int(1.0 / self.control_period_seconds)) == 0:
-                subphase_name = "hold" if self.is_hold_subphase_for_return() else "move"
-                self.get_logger().info(
-                    f"[fm_demo] returning_to_initial_position "
-                    f"subphase={subphase_name} "
-                    f"leader_joint_position={np.round(self.current_leader_joint_position, 3)} "
-                    f"follower_joint_position={np.round(self.current_follower_joint_position, 3)}"
-                )
-
-            self.logged_time.append(current_time_seconds)
-            self.logged_desired_joint_position.append(self.initial_joint_position.copy())
-            self.logged_leader_joint_position.append(self.current_leader_joint_position.copy())
-            self.logged_leader_joint_velocity.append(self.current_leader_joint_velocity.copy())
-            self.logged_follower_joint_position.append(self.current_follower_joint_position.copy())
-            self.logged_follower_joint_velocity.append(self.current_follower_joint_velocity.copy())
-            self.logged_phase.append(phase_name)
-
-            self.phase_step_counter += 1
-            if self.phase_step_counter >= self.return_to_initial_steps:
-                self.demo_phase = "done"
-                self.demo_finished = True
-                self.control_timer.cancel()
-                self.save_logged_data_and_plot()
-                self.get_logger().info("[fm_demo] demo completed")
-            return
+        self.log_step(t)
 
 
 def main():
     rclpy.init()
-    demo_node = FreeModelDemo()
+    node = FreeModelDemo()
     try:
-        rclpy.spin(demo_node)
+        rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
         try:
-            if not demo_node.demo_finished:
-                demo_node.save_logged_data_and_plot()
+            if not node.demo_finished:
+                node.save_outputs()
         except Exception:
             pass
         try:
-            demo_node.destroy_node()
+            node.destroy_node()
         except Exception:
             pass
         try:
